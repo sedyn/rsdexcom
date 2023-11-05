@@ -18,9 +18,8 @@ pub trait HttpClient {
     ) -> Result<u16, Self::Error>;
 }
 
-#[cfg_attr(test, derive(PartialEq))]
 #[repr(u8)]
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq)]
 pub enum Trend {
     None,
     DoubleUp,
@@ -55,9 +54,9 @@ pub struct Dexcom<T: HttpClient> {
 struct GetLatestGlucoseValuesRequest<'a> {
     session_id: &'a str,
     // fixed as 10
-    minutes: i8,
+    minutes: u32,
     // fixed as 1.
-    max_count: i8,
+    max_count: u32,
 }
 
 #[derive(Serialize)]
@@ -124,11 +123,11 @@ impl<T: HttpClient> Dexcom<T> {
         }
     }
 
-    fn post_request<D: Serialize, const N: usize>(
+    fn post_request<R: Serialize, const N: usize>(
         &self,
         client: &mut T,
         url: &str,
-        request: &D,
+        request: &R,
         buf: &mut Vec<u8, N>,
     ) -> DexcomResult<()> {
         let body =
