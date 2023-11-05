@@ -6,6 +6,10 @@ authors = ["Sehyun Park <doodot.dev@gmail.com>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = []
+ous = []
+
 [dependencies]
 heapless = { version = "0.7" }
 

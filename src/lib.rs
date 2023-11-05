@@ -1,5 +1,7 @@
 #![no_std]
 
+pub mod url;
+
 use core::{marker::PhantomData, str::FromStr};
 
 use heapless::{String, Vec};
@@ -109,13 +111,6 @@ impl Into<DexcomError> for DexcomErrorResponse<'_> {
     }
 }
 
-const DEXCOM_GLUCOSE_READINGS_ENDPOINT: &str = 
-    "https://shareous1.dexcom.com/ShareWebServices/Services/Publisher/ReadPublisherLatestGlucoseValues";
-const DEXCOM_LOGIN_ID_ENDPOINT: &str =
-    "https://shareous1.dexcom.com/ShareWebServices/Services/General/LoginPublisherAccountById";
-const DEXCOM_AUTHENTICATE_ENDPOINT: &str =
-    "https://shareous1.dexcom.com/ShareWebServices/Services/General/AuthenticatePublisherAccount";
-
 impl<T: HttpClient> Dexcom<T> {
     pub fn new() -> Self {
         Self {
@@ -161,7 +156,12 @@ impl<T: HttpClient> Dexcom<T> {
 
         let mut buf: Vec<u8, 256> = Vec::new();
 
-        self.post_request(client, DEXCOM_GLUCOSE_READINGS_ENDPOINT, &request, &mut buf)?;
+        self.post_request(
+            client,
+            url::DEXCOM_GLUCOSE_READINGS_ENDPOINT,
+            &request,
+            &mut buf,
+        )?;
 
         let (response, _) =
             serde_json_core::from_slice(&buf).map_err(|_| DexcomError::ParsingError)?;
@@ -195,7 +195,7 @@ impl<T: HttpClient> Dexcom<T> {
 
         let mut buf: Vec<u8, 256> = Vec::new();
 
-        self.post_request(client, DEXCOM_LOGIN_ID_ENDPOINT, &request, &mut buf)?;
+        self.post_request(client, url::DEXCOM_LOGIN_ID_ENDPOINT, &request, &mut buf)?;
 
         let (response, _) =
             serde_json_core::from_slice(&buf).map_err(|_| DexcomError::ParsingError)?;
@@ -220,7 +220,12 @@ impl<T: HttpClient> Dexcom<T> {
 
         let mut buf: Vec<u8, 256> = Vec::new();
 
-        self.post_request(client, DEXCOM_AUTHENTICATE_ENDPOINT, &request, &mut buf)?;
+        self.post_request(
+            client,
+            url::DEXCOM_AUTHENTICATE_ENDPOINT,
+            &request,
+            &mut buf,
+        )?;
 
         let (response, _) =
             serde_json_core::from_slice(&buf).map_err(|_| DexcomError::ParsingError)?;
