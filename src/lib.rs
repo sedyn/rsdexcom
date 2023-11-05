@@ -253,15 +253,15 @@ mod tests {
             buf: &mut Vec<u8, N>,
         ) -> Result<u16, Self::Error> {
             match url {
-                DEXCOM_GLUCOSE_READINGS_ENDPOINT => {
+                url::DEXCOM_GLUCOSE_READINGS_ENDPOINT => {
                     buf.write_str(&r#"[{"WT":"Date(1699110415000)","ST":"Date(1699110415000)","DT":"Date(1699110415000+0900)","Value":153,"Trend":"Flat"}]"#)?;
                     Ok(200)
                 }
-                DEXCOM_LOGIN_ID_ENDPOINT => {
+                url::DEXCOM_LOGIN_ID_ENDPOINT => {
                     buf.write_str(&r#""a21d18db-a276-40bc-8337-77dcd02df53e""#)?;
                     Ok(200)
                 }
-                DEXCOM_AUTHENTICATE_ENDPOINT => {
+                url::DEXCOM_AUTHENTICATE_ENDPOINT => {
                     buf.write_str(&r#""1e913fce-5a34-4d27-a991-b6cb3a3bd3d8""#)?;
                     Ok(200)
                 }
