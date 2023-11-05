@@ -4,3 +4,6 @@ A Rust library for `no_std` enviroments providing an interface to the Dexcom Sha
 
 # QuickStart
 
+# pydexcom
+
+Inspired by [pydexcom](https://github.com/gagebenne/pydexcom)
