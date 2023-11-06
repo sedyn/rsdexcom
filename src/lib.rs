@@ -116,7 +116,7 @@ where
         let mut request = self.client.request(
             embedded_svc::http::Method::Post,
             uri,
-            &[("Content-Type", "Application/json")],
+            &[("Content-Type", "application/json")],
         )?;
 
         request.write(&body)?;
@@ -130,6 +130,9 @@ where
         let size = response.read(&mut buf)?;
 
         let buf = &buf[..size];
+
+        #[cfg(feature = "log")]
+        log::info!("{:?}", String::from_utf8(buf.to_vec()));
 
         match status_code {
             200..=299 => {
