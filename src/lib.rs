@@ -171,7 +171,7 @@ where
         application_id: &str,
     ) -> Result<String> {
         self.post_request(
-            url::DEXCOM_LOGIN_ID_ENDPOINT,
+            url::DEXCOM_AUTHENTICATE_ENDPOINT,
             &GetAccountIdRequest {
                 account_name,
                 password,
@@ -187,7 +187,7 @@ where
         application_id: &str,
     ) -> Result<String> {
         self.post_request(
-            url::DEXCOM_AUTHENTICATE_ENDPOINT,
+            url::DEXCOM_LOGIN_ID_ENDPOINT,
             &GetSessionIdRequest {
                 account_id,
                 password,
