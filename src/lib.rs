@@ -123,17 +123,19 @@ where
 
         let status_code = response.status();
 
-        let mut buf = [0_u8; 256];
+        let mut buf = [0_u8; 512];
 
-        response.read(&mut buf)?;
+        let size = response.read(&mut buf)?;
+
+        let buf = &buf[..size];
 
         match status_code {
             200..=299 => {
-                let response = serde_json::from_slice::<D>(&buf)?;
+                let response = serde_json::from_slice::<D>(buf)?;
                 Ok(response)
             }
             _ => {
-                let response = serde_json::from_slice::<DexcomErrorResponse>(&buf)?;
+                let response = serde_json::from_slice::<DexcomErrorResponse>(buf)?;
                 let error: DexcomError = response.into();
                 bail!("{:?}", error)
             }
