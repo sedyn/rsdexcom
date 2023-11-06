@@ -113,9 +113,11 @@ where
     ) -> Result<D> {
         let body = serde_json::to_vec(&request)?;
 
-        let mut request = self
-            .client
-            .request(embedded_svc::http::Method::Post, uri, &[])?;
+        let mut request = self.client.request(
+            embedded_svc::http::Method::Post,
+            uri,
+            &[("Content-Type", "Application/json")],
+        )?;
 
         request.write(&body)?;
 
