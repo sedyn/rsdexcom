@@ -41,6 +41,7 @@ where
 
 #[derive(Serialize)]
 struct GetLatestGlucoseValuesRequest<'a> {
+    #[serde(rename = "sessionId")]
     session_id: &'a str,
     // fixed as 10
     minutes: u32,
