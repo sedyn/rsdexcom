@@ -46,6 +46,7 @@ struct GetLatestGlucoseValuesRequest<'a> {
     // fixed as 10
     minutes: u32,
     // fixed as 1.
+    #[serde(rename = "maxCount")]
     max_count: u32,
 }
 
