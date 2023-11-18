@@ -1,6 +1,6 @@
 pub mod url;
 
-use anyhow::{bail, Result};
+use std::fmt::Display;
 
 use embedded_svc::{
     http::client::{Client, Connection},
@@ -23,6 +23,23 @@ pub enum Trend {
     RateOutOfRange,
 }
 
+impl Display for Trend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Trend::None => "-",
+            Trend::DoubleUp => "↑↑",
+            Trend::SingleUp => "↑",
+            Trend::FortyFiveUp => "↗",
+            Trend::Flat => "→",
+            Trend::FortyFiveDown => "↘",
+            Trend::SingleDown => "↓",
+            Trend::DoubleDown => "↓↓",
+            Trend::NotComputable => "?",
+            Trend::RateOutOfRange => "!",
+        })
+    }
+}
+
 #[repr(u8)]
 #[derive(Debug, PartialEq)]
 pub enum DexcomError {
@@ -32,10 +49,7 @@ pub enum DexcomError {
     UnknownError,
 }
 
-pub struct Dexcom<'a, C: Connection>
-where
-    <C as ErrorType>::Error: std::error::Error + Send + Sync + 'static,
-{
+pub struct Dexcom<'a, C: Connection> {
     client: &'a mut Client<C>,
 }
 
@@ -100,10 +114,27 @@ impl Into<DexcomError> for DexcomErrorResponse<'_> {
     }
 }
 
-impl<'a, C: Connection> Dexcom<'a, C>
-where
-    <C as ErrorType>::Error: std::error::Error + Send + Sync + 'static,
-{
+pub enum ClientError<E: std::error::Error> {
+    ConnectionError(E),
+    DexcomError(DexcomError),
+    JSONError(serde_json::Error),
+}
+
+impl<E: std::error::Error> From<DexcomError> for ClientError<E> {
+    fn from(value: DexcomError) -> Self {
+        ClientError::DexcomError(value)
+    }
+}
+
+impl<E: std::error::Error> From<serde_json::Error> for ClientError<E> {
+    fn from(value: serde_json::Error) -> Self {
+        ClientError::JSONError(value)
+    }
+}
+
+type Result<T, C> = std::result::Result<T, ClientError<<C as ErrorType>::Error>>;
+
+impl<'a, C: Connection> Dexcom<'a, C> {
     pub fn new(client: &'a mut Client<C>) -> Self {
         Self { client }
     }
@@ -112,24 +143,33 @@ where
         &mut self,
         uri: &str,
         request: &S,
-    ) -> Result<D> {
+    ) -> Result<D, C> {
         let body = serde_json::to_vec(&request)?;
 
-        let mut request = self.client.request(
-            embedded_svc::http::Method::Post,
-            uri,
-            &[("Content-Type", "application/json")],
-        )?;
+        let mut request = self
+            .client
+            .request(
+                embedded_svc::http::Method::Post,
+                uri,
+                &[("Content-Type", "application/json")],
+            )
+            .map_err(|e| ClientError::ConnectionError(e))?;
 
-        request.write(&body)?;
+        request
+            .write(&body)
+            .map_err(|e| ClientError::ConnectionError(e))?;
 
-        let mut response = request.submit()?;
+        let mut response = request
+            .submit()
+            .map_err(|e| ClientError::ConnectionError(e))?;
 
         let status_code = response.status();
 
         let mut buf = [0_u8; 512];
 
-        let size = response.read(&mut buf)?;
+        let size = response
+            .read(&mut buf)
+            .map_err(|e| ClientError::ConnectionError(e))?;
 
         let buf = &buf[..size];
 
@@ -144,12 +184,15 @@ where
             _ => {
                 let response = serde_json::from_slice::<DexcomErrorResponse>(buf)?;
                 let error: DexcomError = response.into();
-                bail!("{:?}", error)
+                Err(ClientError::DexcomError(error))
             }
         }
     }
 
-    pub fn get_current_glucose_reading(&mut self, session_id: &str) -> Result<[GlucosReading; 1]> {
+    pub fn get_current_glucose_reading(
+        &mut self,
+        session_id: &str,
+    ) -> Result<[GlucosReading; 1], C> {
         self.post_request(
             url::DEXCOM_GLUCOSE_READINGS_ENDPOINT,
             &GetLatestGlucoseValuesRequest {
@@ -165,7 +208,7 @@ where
         account_name: &str,
         password: &str,
         application_id: &str,
-    ) -> Result<String> {
+    ) -> Result<String, C> {
         let account_id = self.get_account_id(account_name, password, application_id)?;
         let session_id = self.get_session_id(&account_id, password, application_id)?;
         Ok(session_id)
@@ -176,7 +219,7 @@ where
         account_name: &str,
         password: &str,
         application_id: &str,
-    ) -> Result<String> {
+    ) -> Result<String, C> {
         self.post_request(
             url::DEXCOM_AUTHENTICATE_ENDPOINT,
             &GetAccountIdRequest {
@@ -192,7 +235,7 @@ where
         account_id: &str,
         password: &str,
         application_id: &str,
-    ) -> Result<String> {
+    ) -> Result<String, C> {
         self.post_request(
             url::DEXCOM_LOGIN_ID_ENDPOINT,
             &GetSessionIdRequest {
