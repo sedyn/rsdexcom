@@ -114,6 +114,7 @@ impl Into<DexcomError> for DexcomErrorResponse<'_> {
     }
 }
 
+#[derive(Debug)]
 pub struct SerdeJsonError(pub serde_json::Error);
 
 impl From<serde_json::Error> for SerdeJsonError {
@@ -122,6 +123,7 @@ impl From<serde_json::Error> for SerdeJsonError {
     }
 }
 
+#[derive(Debug)]
 pub enum ClientError<E: embedded_svc::io::Error> {
     ConnectionError(E),
     DexcomError(DexcomError),
