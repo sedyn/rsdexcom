@@ -114,21 +114,35 @@ impl Into<DexcomError> for DexcomErrorResponse<'_> {
     }
 }
 
-pub enum ClientError<E: std::error::Error> {
-    ConnectionError(E),
-    DexcomError(DexcomError),
-    JSONError(serde_json::Error),
+pub struct SerdeJsonError(pub serde_json::Error);
+
+impl From<serde_json::Error> for SerdeJsonError {
+    fn from(value: serde_json::Error) -> Self {
+        SerdeJsonError(value)
+    }
 }
 
-impl<E: std::error::Error> From<DexcomError> for ClientError<E> {
+pub enum ClientError<E: embedded_svc::io::Error> {
+    ConnectionError(E),
+    DexcomError(DexcomError),
+    JSONError(SerdeJsonError),
+}
+
+impl<E: embedded_svc::io::Error> From<DexcomError> for ClientError<E> {
     fn from(value: DexcomError) -> Self {
         ClientError::DexcomError(value)
     }
 }
 
-impl<E: std::error::Error> From<serde_json::Error> for ClientError<E> {
-    fn from(value: serde_json::Error) -> Self {
+impl<E: embedded_svc::io::Error> From<SerdeJsonError> for ClientError<E> {
+    fn from(value: SerdeJsonError) -> Self {
         ClientError::JSONError(value)
+    }
+}
+
+impl<E: embedded_svc::io::Error> From<E> for ClientError<E> {
+    fn from(value: E) -> Self {
+        ClientError::ConnectionError(value)
     }
 }
 
@@ -144,32 +158,23 @@ impl<'a, C: Connection> Dexcom<'a, C> {
         uri: &str,
         request: &S,
     ) -> Result<D, C> {
-        let body = serde_json::to_vec(&request)?;
+        let body = serde_json::to_vec(&request).map_err(|e| SerdeJsonError(e))?;
 
-        let mut request = self
-            .client
-            .request(
-                embedded_svc::http::Method::Post,
-                uri,
-                &[("Content-Type", "application/json")],
-            )
-            .map_err(|e| ClientError::ConnectionError(e))?;
+        let mut request = self.client.request(
+            embedded_svc::http::Method::Post,
+            uri,
+            &[("Content-Type", "application/json")],
+        )?;
 
-        request
-            .write(&body)
-            .map_err(|e| ClientError::ConnectionError(e))?;
+        request.write(&body)?;
 
-        let mut response = request
-            .submit()
-            .map_err(|e| ClientError::ConnectionError(e))?;
+        let mut response = request.submit()?;
 
         let status_code = response.status();
 
         let mut buf = [0_u8; 512];
 
-        let size = response
-            .read(&mut buf)
-            .map_err(|e| ClientError::ConnectionError(e))?;
+        let size = response.read(&mut buf)?;
 
         let buf = &buf[..size];
 
@@ -178,11 +183,12 @@ impl<'a, C: Connection> Dexcom<'a, C> {
 
         match status_code {
             200..=299 => {
-                let response = serde_json::from_slice::<D>(buf)?;
+                let response = serde_json::from_slice::<D>(buf).map_err(|e| SerdeJsonError(e))?;
                 Ok(response)
             }
             _ => {
-                let response = serde_json::from_slice::<DexcomErrorResponse>(buf)?;
+                let response = serde_json::from_slice::<DexcomErrorResponse>(buf)
+                    .map_err(|e| SerdeJsonError(e))?;
                 let error: DexcomError = response.into();
                 Err(ClientError::DexcomError(error))
             }
@@ -249,10 +255,6 @@ impl<'a, C: Connection> Dexcom<'a, C> {
 
 #[cfg(test)]
 mod tests {
-    use core::fmt::Write;
-
-    use super::*;
-
     // impl Connection for FakeClient {
     //     type Error = core::fmt::Error;
     //     fn post<const N: usize>(

@@ -19,4 +19,4 @@ serde_json = { version = "1" }
 
 embedded-svc = { version = "0.26" }
 
-anyhow = { version = "1.0" }
+mockall = "0.12.1"
