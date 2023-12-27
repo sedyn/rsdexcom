@@ -1,11 +1,9 @@
+pub mod client;
 pub mod url;
 
 use std::fmt::Display;
 
-use embedded_svc::{
-    http::client::{Client, Connection},
-    io::ErrorType,
-};
+use client::Client;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 #[repr(u8)]
@@ -49,8 +47,8 @@ pub enum DexcomError {
     UnknownError,
 }
 
-pub struct Dexcom<'a, C: Connection> {
-    client: &'a mut Client<C>,
+pub struct Dexcom<'a, C: Client> {
+    client: &'a mut C,
 }
 
 #[derive(Serialize)]
@@ -148,10 +146,10 @@ impl<E: embedded_svc::io::Error> From<E> for ClientError<E> {
     }
 }
 
-type Result<T, C> = std::result::Result<T, ClientError<<C as ErrorType>::Error>>;
+type Result<T, C> = std::result::Result<T, ClientError<<C as Client>::Error>>;
 
-impl<'a, C: Connection> Dexcom<'a, C> {
-    pub fn new(client: &'a mut Client<C>) -> Self {
+impl<'a, C: Client> Dexcom<'a, C> {
+    pub fn new(client: &'a mut C) -> Self {
         Self { client }
     }
 
@@ -161,22 +159,18 @@ impl<'a, C: Connection> Dexcom<'a, C> {
         request: &S,
     ) -> Result<D, C> {
         let body = serde_json::to_vec(&request).map_err(|e| SerdeJsonError(e))?;
+        let mut buf = [0; 512];
 
-        let mut request = self.client.request(
+        let (size, status_code) = self.client.request(
             embedded_svc::http::Method::Post,
             uri,
-            &[("Content-Type", "application/json")],
+            &[
+                ("Content-Type", "application/json"),
+                ("User-Agent", "rsdexcom/0.0.1"),
+            ],
+            &body,
+            &mut buf,
         )?;
-
-        request.write(&body)?;
-
-        let mut response = request.submit()?;
-
-        let status_code = response.status();
-
-        let mut buf = [0_u8; 512];
-
-        let size = response.read(&mut buf)?;
 
         let buf = &buf[..size];
 
@@ -257,61 +251,88 @@ impl<'a, C: Connection> Dexcom<'a, C> {
 
 #[cfg(test)]
 mod tests {
-    // impl Connection for FakeClient {
-    //     type Error = core::fmt::Error;
-    //     fn post<const N: usize>(
-    //         &mut self,
-    //         url: &str,
-    //         _: &[u8],
-    //         buf: &mut Vec<u8, N>,
-    //     ) -> Result<u16, Self::Error> {
-    //         match url {
-    //             url::DEXCOM_GLUCOSE_READINGS_ENDPOINT => {
-    //                 buf.write_str(&r#"[{"WT":"Date(1699110415000)","ST":"Date(1699110415000)","DT":"Date(1699110415000+0900)","Value":153,"Trend":"Flat"}]"#)?;
-    //                 Ok(200)
-    //             }
-    //             url::DEXCOM_LOGIN_ID_ENDPOINT => {
-    //                 buf.write_str(&r#""a21d18db-a276-40bc-8337-77dcd02df53e""#)?;
-    //                 Ok(200)
-    //             }
-    //             url::DEXCOM_AUTHENTICATE_ENDPOINT => {
-    //                 buf.write_str(&r#""1e913fce-5a34-4d27-a991-b6cb3a3bd3d8""#)?;
-    //                 Ok(200)
-    //             }
-    //             _ => unreachable!(),
-    //         }
-    //     }
-    // }
+    use std::io::Write;
 
-    // #[test]
-    // fn test_get_current_glucose_reading() {
-    //     let dexcom = Dexcom::new();
-    //     let mut client = FakeClient {};
+    use embedded_svc::http::Method;
+    use mockall::predicate::*;
 
-    //     let session_id = dexcom.load_session_id(&mut client, "", "", "").unwrap();
-    //     assert_eq!(
-    //         session_id,
-    //         UUID::from_str("1e913fce-5a34-4d27-a991-b6cb3a3bd3d8").unwrap()
-    //     );
+    use super::{url, Dexcom, DexcomError, DexcomErrorResponse, GlucosReading, Trend};
 
-    //     let glucose = dexcom.get_current_glucose_reading(&mut client, &session_id);
+    use super::client::*;
 
-    //     assert!(glucose.is_ok());
-    //     assert_eq!(
-    //         glucose,
-    //         Ok([GlucosReading {
-    //             trend: Trend::Flat,
-    //             value: 153,
-    //         }])
-    //     )
-    // }
+    #[test]
+    fn test_get_current_glucose_reading() {
+        let mut client = MockClient::new();
 
-    // #[test]
-    // fn test_dexcom_error_response() {
-    //     let message = r#"{"Code":"SessionIdNotFound"}"#;
-    //     let (response, _) = serde_json_core::from_str::<DexcomErrorResponse>(message).unwrap();
+        client
+            .expect_request()
+            .with(
+                eq(Method::Post),
+                eq(url::DEXCOM_AUTHENTICATE_ENDPOINT),
+                always(),
+                always(),
+                always(),
+            )
+            .returning(|_, _, _, _, mut buf| {
+                let size = buf
+                    .write(b"\"1e913fce-5a34-4d27-a991-b6cb3a3bd3d8\"")
+                    .unwrap();
+                Ok((size, 200u16))
+            });
 
-    //     let error: DexcomError = response.into();
-    //     assert_eq!(error, DexcomError::SessionError);
-    // }
+        client
+            .expect_request()
+            .with(
+                eq(Method::Post),
+                eq(url::DEXCOM_LOGIN_ID_ENDPOINT),
+                always(),
+                always(),
+                always(),
+            )
+            .returning(|_, _, _, _, mut buf| {
+                let size = buf
+                    .write(b"\"a21d18db-a276-40bc-8337-77dcd02df53e\"")
+                    .unwrap();
+                Ok((size, 200u16))
+            });
+
+        client
+            .expect_request()
+            .with(
+                eq(Method::Post),
+                eq(url::DEXCOM_GLUCOSE_READINGS_ENDPOINT),
+                always(),
+                always(),
+                always(),
+            )
+            .returning(|_, _, _, _, mut buf| {
+                let size = buf.write(r#"[{"WT":"Date(1699110415000)","ST":"Date(1699110415000)","DT":"Date(1699110415000+0900)","Value":153,"Trend":"Flat"}]"#.as_bytes()).unwrap();
+                Ok((size, 200u16))
+            });
+
+        let mut dexcom = Dexcom::new(&mut client);
+
+        let session_id = dexcom.load_session_id("", "", "").unwrap();
+        assert_eq!(session_id, "a21d18db-a276-40bc-8337-77dcd02df53e");
+
+        let glucose = dexcom.get_current_glucose_reading(&session_id);
+
+        assert!(glucose.is_ok());
+        assert_eq!(
+            glucose.unwrap(),
+            [GlucosReading {
+                trend: Trend::Flat,
+                value: 153,
+            }]
+        )
+    }
+
+    #[test]
+    fn test_dexcom_error_response() {
+        let message = r#"{"Code":"SessionIdNotFound"}"#;
+        let response = serde_json::from_str::<DexcomErrorResponse>(message).unwrap();
+
+        let error: DexcomError = response.into();
+        assert_eq!(error, DexcomError::SessionError);
+    }
 }
