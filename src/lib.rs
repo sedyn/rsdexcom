@@ -50,25 +50,13 @@ pub enum ArgumentError {
 
 #[repr(u8)]
 #[derive(Debug, PartialEq)]
-pub enum SessionError {
-    NotFound,
-    Invalid,
-}
-
-#[repr(u8)]
-#[derive(Debug, PartialEq)]
-pub enum AccountError {
-    PasswordInvalid,
-    MaxAttemps,
-}
-
-#[repr(u8)]
-#[derive(Debug, PartialEq)]
 pub enum DexcomError {
-    AccountError(AccountError),
-    SessionError(SessionError),
-    ArgumentError(ArgumentError),
-    UnknownError,
+    AccountPasswordInvalid,
+    AuthenticateMaxAttempsExceed,
+    SessionNotFound,
+    SessionInvalid,
+    InvalidArgument(ArgumentError),
+    Unknown,
 }
 
 pub struct Dexcom<'a, C: Client> {
@@ -122,17 +110,16 @@ struct DexcomErrorResponse<'a> {
 
 impl From<DexcomErrorResponse<'_>> for DexcomError {
     fn from(val: DexcomErrorResponse<'_>) -> Self {
+        use DexcomError::*;
         match val.code {
-            None => DexcomError::UnknownError,
+            None => Unknown,
             Some(code) => match code {
-                "SessionIdNotFound" => DexcomError::SessionError(SessionError::NotFound),
-                "SessionNotValid" => DexcomError::SessionError(SessionError::Invalid),
-                "AccountPasswordInvalid" => 
-                    DexcomError::AccountError(AccountError::PasswordInvalid),
-                "SSO_AuthenticateMaxAttemptsExceeed" => DexcomError::AccountError(AccountError::PasswordInvalid),
-                
+                "SessionIdNotFound" => SessionNotFound,
+                "SessionNotValid" => SessionInvalid,
+                "AccountPasswordInvalid" => AccountPasswordInvalid,
+                "SSO_AuthenticateMaxAttemptsExceeed" => AuthenticateMaxAttempsExceed,
                 "InvalidArgument" => {
-                    DexcomError::ArgumentError(match val.message {
+                    InvalidArgument(match val.message {
                         None => ArgumentError::Unknown,
                         Some(message) => {
                             if message.contains("accountName") {
@@ -147,7 +134,7 @@ impl From<DexcomErrorResponse<'_>> for DexcomError {
                         }
                     })
                 },
-                _ => DexcomError::UnknownError,
+                _ => Unknown,
             },
         }
     }
@@ -393,6 +380,6 @@ mod tests {
         let response = serde_json::from_str::<DexcomErrorResponse>(message).unwrap();
 
         let error: DexcomError = response.into();
-        assert_eq!(error, DexcomError::SessionError(SessionError::NotFound));
+        assert_eq!(error, DexcomError::SessionNotFound);
     }
 }
