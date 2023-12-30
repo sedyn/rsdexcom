@@ -1,5 +1,4 @@
 pub mod client;
-pub mod url;
 
 use std::fmt::Display;
 
@@ -38,12 +37,37 @@ impl Display for Trend {
     }
 }
 
+
+
+#[repr(u8)]
+#[derive(Debug, PartialEq)]
+pub enum ArgumentError {
+    InvalidUserName,
+    InvalidPassword,
+    InvalidAccountId,
+    Unknown,
+}
+
+#[repr(u8)]
+#[derive(Debug, PartialEq)]
+pub enum SessionError {
+    NotFound,
+    Invalid,
+}
+
+#[repr(u8)]
+#[derive(Debug, PartialEq)]
+pub enum AccountError {
+    PasswordInvalid,
+    MaxAttemps,
+}
+
 #[repr(u8)]
 #[derive(Debug, PartialEq)]
 pub enum DexcomError {
-    AccountError,
-    SessionError,
-    ArgumentError,
+    AccountError(AccountError),
+    SessionError(SessionError),
+    ArgumentError(ArgumentError),
     UnknownError,
 }
 
@@ -93,19 +117,36 @@ pub struct GlucosReading {
 struct DexcomErrorResponse<'a> {
     #[serde(rename = "Code")]
     code: Option<&'a str>,
-    // message: Option<&'a [u8]>,
+    message: Option<&'a str>,
 }
 
-impl Into<DexcomError> for DexcomErrorResponse<'_> {
-    fn into(self) -> DexcomError {
-        match self.code {
+impl From<DexcomErrorResponse<'_>> for DexcomError {
+    fn from(val: DexcomErrorResponse<'_>) -> Self {
+        match val.code {
             None => DexcomError::UnknownError,
             Some(code) => match code {
-                "SessionIdNotFound" | "SessionNotValid" => DexcomError::SessionError,
-                "AccountPasswordInvalid" | "SSO_AuthenticateMaxAttemptsExceeed" => {
-                    DexcomError::AccountError
-                }
-                "InvalidArgument" => DexcomError::ArgumentError,
+                "SessionIdNotFound" => DexcomError::SessionError(SessionError::NotFound),
+                "SessionNotValid" => DexcomError::SessionError(SessionError::Invalid),
+                "AccountPasswordInvalid" => 
+                    DexcomError::AccountError(AccountError::PasswordInvalid),
+                "SSO_AuthenticateMaxAttemptsExceeed" => DexcomError::AccountError(AccountError::PasswordInvalid),
+                
+                "InvalidArgument" => {
+                    DexcomError::ArgumentError(match val.message {
+                        None => ArgumentError::Unknown,
+                        Some(message) => {
+                            if message.contains("accountName") {
+                                ArgumentError::InvalidUserName
+                            } else if message.contains("password") {
+                                ArgumentError::InvalidPassword
+                            } else if message.contains("UUID") {
+                                ArgumentError::InvalidAccountId
+                            } else {
+                                ArgumentError::Unknown
+                            }
+                        }
+                    })
+                },
                 _ => DexcomError::UnknownError,
             },
         }
@@ -158,7 +199,7 @@ impl<'a, C: Client> Dexcom<'a, C> {
         uri: &str,
         request: &S,
     ) -> Result<D, C> {
-        let body = serde_json::to_vec(&request).map_err(|e| SerdeJsonError(e))?;
+        let body = serde_json::to_vec(&request).map_err(SerdeJsonError)?;
         let mut buf = [0; 512];
 
         let (size, status_code) = self.client.request(
@@ -179,12 +220,12 @@ impl<'a, C: Client> Dexcom<'a, C> {
 
         match status_code {
             200..=299 => {
-                let response = serde_json::from_slice::<D>(buf).map_err(|e| SerdeJsonError(e))?;
+                let response = serde_json::from_slice::<D>(buf).map_err(SerdeJsonError)?;
                 Ok(response)
             }
             _ => {
                 let response = serde_json::from_slice::<DexcomErrorResponse>(buf)
-                    .map_err(|e| SerdeJsonError(e))?;
+                    .map_err(SerdeJsonError)?;
                 let error: DexcomError = response.into();
                 Err(ClientError::DexcomError(error))
             }
@@ -249,6 +290,26 @@ impl<'a, C: Client> Dexcom<'a, C> {
     }
 }
 
+#[cfg(feature = "ous")]
+mod url {
+    pub(crate) const DEXCOM_GLUCOSE_READINGS_ENDPOINT: &str = 
+        "https://shareous1.dexcom.com/ShareWebServices/Services/Publisher/ReadPublisherLatestGlucoseValues";
+    pub(crate) const DEXCOM_LOGIN_ID_ENDPOINT: &str =
+        "https://shareous1.dexcom.com/ShareWebServices/Services/General/LoginPublisherAccountById";
+    pub(crate) const DEXCOM_AUTHENTICATE_ENDPOINT: &str =
+        "https://shareous1.dexcom.com/ShareWebServices/Services/General/AuthenticatePublisherAccount";
+}
+
+#[cfg(not(feature = "ous"))]
+mod url {
+    pub(crate) const DEXCOM_GLUCOSE_READINGS_ENDPOINT: &str = 
+        "https://share2.dexcom.com/ShareWebServices/Services/Publisher/ReadPublisherLatestGlucoseValues";
+    pub(crate) const DEXCOM_LOGIN_ID_ENDPOINT: &str =
+        "https://share2.dexcom.com/ShareWebServices/Services/General/LoginPublisherAccountById";
+    pub(crate) const DEXCOM_AUTHENTICATE_ENDPOINT: &str =
+        "https://share2.dexcom.com/ShareWebServices/Services/General/AuthenticatePublisherAccount";    
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Write;
@@ -256,8 +317,7 @@ mod tests {
     use embedded_svc::http::Method;
     use mockall::predicate::*;
 
-    use super::{url, Dexcom, DexcomError, DexcomErrorResponse, GlucosReading, Trend};
-
+    use super::*;
     use super::client::*;
 
     #[test]
@@ -333,6 +393,6 @@ mod tests {
         let response = serde_json::from_str::<DexcomErrorResponse>(message).unwrap();
 
         let error: DexcomError = response.into();
-        assert_eq!(error, DexcomError::SessionError);
+        assert_eq!(error, DexcomError::SessionError(SessionError::NotFound));
     }
 }
