@@ -37,17 +37,6 @@ impl Display for Trend {
     }
 }
 
-
-
-#[repr(u8)]
-#[derive(Debug, PartialEq)]
-pub enum ArgumentError {
-    InvalidUserName,
-    InvalidPassword,
-    InvalidAccountId,
-    Unknown,
-}
-
 #[repr(u8)]
 #[derive(Debug, PartialEq)]
 pub enum DexcomError {
@@ -55,7 +44,10 @@ pub enum DexcomError {
     AuthenticateMaxAttempsExceed,
     SessionNotFound,
     SessionInvalid,
-    InvalidArgument(ArgumentError),
+    InvalidUsername,
+    InvalidPassword,
+    InvalidAccountId,
+    InvalidUnknown,
     Unknown,
 }
 
@@ -119,20 +111,20 @@ impl From<DexcomErrorResponse<'_>> for DexcomError {
                 "AccountPasswordInvalid" => AccountPasswordInvalid,
                 "SSO_AuthenticateMaxAttemptsExceeed" => AuthenticateMaxAttempsExceed,
                 "InvalidArgument" => {
-                    InvalidArgument(match val.message {
-                        None => ArgumentError::Unknown,
+                    match val.message {
+                        None => InvalidUnknown,
                         Some(message) => {
                             if message.contains("accountName") {
-                                ArgumentError::InvalidUserName
+                                InvalidUsername
                             } else if message.contains("password") {
-                                ArgumentError::InvalidPassword
+                                InvalidPassword
                             } else if message.contains("UUID") {
-                                ArgumentError::InvalidAccountId
+                                InvalidAccountId
                             } else {
-                                ArgumentError::Unknown
+                                InvalidUnknown
                             }
                         }
-                    })
+                    }
                 },
                 _ => Unknown,
             },
