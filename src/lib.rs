@@ -4,7 +4,7 @@ use client::Client;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 #[repr(u8)]
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Deserialize, Debug, PartialEq, Clone, Copy)]
 pub enum Trend {
     None,
     DoubleUp,
@@ -64,7 +64,7 @@ struct GetSessionIdRequest<'a> {
 }
 
 #[cfg_attr(test, derive(PartialEq))]
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone, Copy)]
 pub struct GlucosReading {
     #[serde(rename = "Value")]
     pub value: i32,
@@ -186,15 +186,17 @@ impl<'a, C: Client> Dexcom<'a, C> {
     pub fn get_current_glucose_reading(
         &mut self,
         session_id: &str,
-    ) -> Result<[GlucosReading; 1], C> {
-        self.post_request(
+    ) -> Result<GlucosReading, C> {
+        let reading = self.post_request::<_, [GlucosReading; 1]>(
             url::DEXCOM_GLUCOSE_READINGS_ENDPOINT,
             &GetLatestGlucoseValuesRequest {
                 session_id,
                 minutes: 10,
                 max_count: 1,
             },
-        )
+        )?;
+
+        Ok(reading[0])
     }
 
     pub fn load_session_id(
@@ -327,10 +329,10 @@ mod tests {
         assert!(glucose.is_ok());
         assert_eq!(
             glucose.unwrap(),
-            [GlucosReading {
+            GlucosReading {
                 trend: Trend::Flat,
                 value: 153,
-            }]
+            }
         )
     }
 
