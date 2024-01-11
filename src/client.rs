@@ -1,4 +1,4 @@
-use embedded_svc::{http::Method, io::Error};
+use embedded_svc::io::Error;
 #[cfg(test)]
 use mockall::automock;
 
@@ -17,9 +17,8 @@ impl Error for TestError {
 pub trait Client {
     type Error: Error;
 
-    fn request<'a>(
+    fn post_request<'a>(
         &mut self,
-        method: Method,
         uri: &'a str,
         headers: &'a [(&'a str, &'a str)],
         body: &[u8],

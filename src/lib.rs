@@ -59,9 +59,7 @@ pub struct Dexcom<'a, C: Client> {
 struct GetLatestGlucoseValuesRequest<'a> {
     #[serde(rename = "sessionId")]
     session_id: &'a str,
-    // fixed as 10
     minutes: u32,
-    // fixed as 1.
     #[serde(rename = "maxCount")]
     max_count: u32,
 }
@@ -181,8 +179,7 @@ impl<'a, C: Client> Dexcom<'a, C> {
         let body = serde_json::to_vec(&request).map_err(SerdeJsonError)?;
         let mut buf = [0; 512];
 
-        let (size, status_code) = self.client.request(
-            embedded_svc::http::Method::Post,
+        let (size, status_code) = self.client.post_request(
             uri,
             &[
                 ("Content-Type", "application/json"),
@@ -293,7 +290,6 @@ mod url {
 mod tests {
     use std::io::Write;
 
-    use embedded_svc::http::Method;
     use mockall::predicate::*;
 
     use super::*;
@@ -304,15 +300,14 @@ mod tests {
         let mut client = MockClient::new();
 
         client
-            .expect_request()
+            .expect_post_request()
             .with(
-                eq(Method::Post),
                 eq(url::DEXCOM_AUTHENTICATE_ENDPOINT),
                 always(),
                 always(),
                 always(),
             )
-            .returning(|_, _, _, _, mut buf| {
+            .returning(|_, _, _, mut buf| {
                 let size = buf
                     .write(b"\"1e913fce-5a34-4d27-a991-b6cb3a3bd3d8\"")
                     .unwrap();
@@ -320,15 +315,14 @@ mod tests {
             });
 
         client
-            .expect_request()
+            .expect_post_request()
             .with(
-                eq(Method::Post),
                 eq(url::DEXCOM_LOGIN_ID_ENDPOINT),
                 always(),
                 always(),
                 always(),
             )
-            .returning(|_, _, _, _, mut buf| {
+            .returning(|_, _, _, mut buf| {
                 let size = buf
                     .write(b"\"a21d18db-a276-40bc-8337-77dcd02df53e\"")
                     .unwrap();
@@ -336,15 +330,14 @@ mod tests {
             });
 
         client
-            .expect_request()
+            .expect_post_request()
             .with(
-                eq(Method::Post),
                 eq(url::DEXCOM_GLUCOSE_READINGS_ENDPOINT),
                 always(),
                 always(),
                 always(),
             )
-            .returning(|_, _, _, _, mut buf| {
+            .returning(|_, _, _, mut buf| {
                 let size = buf.write(r#"[{"WT":"Date(1699110415000)","ST":"Date(1699110415000)","DT":"Date(1699110415000+0900)","Value":153,"Trend":"Flat"}]"#.as_bytes()).unwrap();
                 Ok((size, 200u16))
             });
