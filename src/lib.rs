@@ -1,7 +1,5 @@
 pub mod client;
 
-use std::fmt::Display;
-
 use client::Client;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -18,23 +16,6 @@ pub enum Trend {
     DoubleDown,
     NotComputable,
     RateOutOfRange,
-}
-
-impl Display for Trend {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Trend::None => "-",
-            Trend::DoubleUp => "↑↑",
-            Trend::SingleUp => "↑",
-            Trend::FortyFiveUp => "↗",
-            Trend::Flat => "→",
-            Trend::FortyFiveDown => "↘",
-            Trend::SingleDown => "↓",
-            Trend::DoubleDown => "↓↓",
-            Trend::NotComputable => "?",
-            Trend::RateOutOfRange => "!",
-        })
-    }
 }
 
 #[repr(u8)]
@@ -144,12 +125,6 @@ pub enum ClientError<E: embedded_svc::io::Error> {
     ConnectionError(E),
     DexcomError(DexcomError),
     JSONError(SerdeJsonError),
-}
-
-impl<E: embedded_svc::io::Error> From<DexcomError> for ClientError<E> {
-    fn from(value: DexcomError) -> Self {
-        ClientError::DexcomError(value)
-    }
 }
 
 impl<E: embedded_svc::io::Error> From<SerdeJsonError> for ClientError<E> {
